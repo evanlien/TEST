@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>個人業務銷售數據分析儀表板</title>
+  <!-- 載入 Google Fonts Noto Sans TC 與 Inter 提升繁體中文與數字閱讀質感 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 載入 Chart.js 用於互動式趨勢圖與排行榜 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- 載入 SheetJS (xlsx) 用於解析 Excel 與 CSV 檔案 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              bg: '#F4F7FA',
+              primary: '#1E40AF',
+              secondary: '#2563EB',
+              light: '#DBEAFE',
+              dark: '#0F172A'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#F4F7FA] text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- 頂部通知橫幅（取代 alert，用於提示操作狀態與錯誤訊息） -->
+  <div id="toastBanner" class="fixed top-4 right-4 z-50 hidden max-w-md transition-all duration-300 transform">
+    <div id="toastContent" class="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium bg-white border-blue-200 text-slate-800">
+      <span id="toastIcon" class="text-lg">ℹ️</span>
+      <span id="toastMessage">訊息內容</span>
+    </div>
+  </div>
+
+  <!-- 頂部導覽與操作區 -->
+  <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <!-- 左側標題與資料來源狀態 -->
+        <div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <div class="w-9 h-9 rounded-lg bg-[#1E40AF] text-white flex items-center justify-center shadow-sm">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+              </svg>
+            </div>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">個人業務銷售數據分析儀表板</h1>
+            <span id="dataStatusBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+              <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+              <span id="dataStatusText">目前顯示：內建模擬資料（共 60 筆）</span>
+            </span>
+          </div>
+          <p class="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            <span>所有資料僅在您的瀏覽器本機運算，不會上傳至任何伺服器，重新整理後將恢復預設狀態。</span>
+          </p>
+        </div>
+
+        <!-- 右側檔案匯入與工具按鈕 -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
+          <button id="btnImportFile" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1E40AF] hover:bg-[#1d3b9e] active:scale-[0.99] text-white text-sm font-semibold shadow-sm transition cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            <span>匯入 Excel / CSV 檔案</span>
+          </button>
+
+          <button id="btnDownloadSample" type="button" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-sm font-medium transition cursor-pointer">
+            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            <span>下載範例 CSV</span>
+          </button>
+
+          <button id="btnResetMock" type="button" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition cursor-pointer">
+            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span>重設為模擬資料</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主內容容器 -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- 智慧欄位對應面板（上傳檔案後自動展開） -->
+    <section id="mappingPanel" class="hidden bg-white rounded-2xl border-2 border-blue-500 shadow-md p-5 sm:p-6 transition-all">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-[#1E40AF]">步驟確認</span>
+            <h2 class="text-lg font-bold text-slate-900">智慧欄位對應設定</h2>
+          </div>
+          <p class="text-sm text-slate-600 mt-1">
+            已讀取檔案「<span id="uploadedFileName" class="font-semibold text-slate-900"></span>」（共 <span id="uploadedRowCount" class="font-semibold text-[#1E40AF]">0</span> 筆資料）。請確認以下欄位對應是否正確：
+          </p>
+        </div>
+        <!-- 若 Excel 有多個工作表，提供切換 -->
+        <div id="sheetSelectorWrapper" class="hidden items-center gap-2">
+          <label for="sheetSelector" class="text-xs font-semibold text-slate-600">選擇工作表：</label>
+          <select id="sheetSelector" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
+        <!-- 日期（必填） -->
+        <div class="bg-blue-50/60 p-3.5 rounded-xl border border-blue-100">
+          <label for="mapDate" class="block text-xs font-bold text-slate-700 mb-1.5">
+            日期欄位 <span class="text-red-600">*必填</span>
+          </label>
+          <select id="mapDate" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+        </div>
+
+        <!-- 金額（必填） -->
+        <div class="bg-blue-50/60 p-3.5 rounded-xl border border-blue-100">
+          <label for="mapAmount" class="block text-xs font-bold text-slate-700 mb-1.5">
+            金額 / 營收欄位 <span class="text-red-600">*必填</span>
+          </label>
+          <select id="mapAmount" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+        </div>
+
+        <!-- 數量（選填） -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <label for="mapQty" class="block text-xs font-semibold text-slate-700 mb-1.5">
+            銷售數量 <span class="text-slate-400 font-normal">(選填，預設 1)</span>
+          </label>
+          <select id="mapQty" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+        </div>
+
+        <!-- 品項（選填） -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <label for="mapProduct" class="block text-xs font-semibold text-slate-700 mb-1.5">
+            品項 / 商品 <span class="text-slate-400 font-normal">(選填)</span>
+          </label>
+          <select id="mapProduct" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+        </div>
+
+        <!-- 通路/業務（選填） -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <label for="mapChannel" class="block text-xs font-semibold text-slate-700 mb-1.5">
+            通路 / 業務 <span class="text-slate-400 font-normal">(選填)</span>
+          </label>
+          <select id="mapChannel" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-end gap-3 mt-5 pt-4 border-t border-slate-100">
+        <button id="btnCancelMapping" type="button" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium transition cursor-pointer">
+          取消匯入
+        </button>
+        <button id="btnApplyMapping" type="button" class="px-5 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1E40AF] text-white text-sm font-semibold shadow-sm transition cursor-pointer">
+          套用並更新儀表板
+        </button>
+      </div>
+    </section>
+
+    <!-- 多維度即時篩選列 -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 flex-1">
+          <!-- 開始日期 -->
+          <div>
+            <label for="filterStartDate" class="block text-xs font-semibold text-slate-600 mb-1">開始日期</label>
+            <input type="date" id="filterStartDate" class="w-full rounded-xl border border-slate-300 bg-slate-50/70 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+          </div>
+
+          <!-- 結束日期 -->
+          <div>
+            <label for="filterEndDate" class="block text-xs font-semibold text-slate-600 mb-1">結束日期</label>
+            <input type="date" id="filterEndDate" class="w-full rounded-xl border border-slate-300 bg-slate-50/70 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+          </div>
+
+          <!-- 通路 / 業務篩選 -->
+          <div>
+            <label for="filterChannel" class="block text-xs font-semibold text-slate-600 mb-1">通路 / 業務</label>
+            <select id="filterChannel" class="w-full rounded-xl border border-slate-300 bg-slate-50/70 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+              <option value="ALL">全部通路 / 業務</option>
+            </select>
+          </div>
+
+          <!-- 品項篩選 -->
+          <div>
+            <label for="filterProduct" class="block text-xs font-semibold text-slate-600 mb-1">商品品項</label>
+            <select id="filterProduct" class="w-full rounded-xl border border-slate-300 bg-slate-50/70 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+              <option value="ALL">全部商品品項</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 篩選狀態摘要與清除按鈕 -->
+        <div class="flex items-center justify-between lg:justify-end gap-3 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+          <span class="text-xs text-slate-500">
+            符合條件：<strong id="filteredCountText" class="text-slate-800 font-bold">0</strong> 筆
+          </span>
+          <button id="btnClearFilters" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition cursor-pointer shrink-0">
+            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            <span>清除篩選</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第一層：4 張關鍵指標 (KPI) 摘要卡片 -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <!-- KPI 1：總營收 -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold text-slate-500">總營收金額</span>
+          <span class="w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </span>
+        </div>
+        <div id="kpiTotalRevenue" class="mt-3 text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">NT$ 0</div>
+        <p id="kpiDateRangeSub" class="mt-2 text-xs text-slate-500 truncate">統計區間：載入中...</p>
+      </div>
+
+      <!-- KPI 2：總銷售數量 -->
+      <div class="bg-white rounded-2xl border-2 border-orange-500 shadow-sm p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold text-slate-500">總銷售數量</span>
+          <span class="w-9 h-9 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+          </span>
+        </div>
+        <div id="kpiTotalQty" class="mt-3 text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">0 件</div>
+        <p id="kpiAvgQtySub" class="mt-2 text-xs text-slate-500">平均每筆銷售：0 件</p>
+      </div>
+
+      <!-- KPI 3：平均客單價 -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold text-slate-500">平均客單價</span>
+          <span class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+          </span>
+        </div>
+        <div id="kpiAvgOrder" class="mt-3 text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">NT$ 0</div>
+        <p id="kpiOrderCountSub" class="mt-2 text-xs text-slate-500">依據 0 筆有效紀錄計算</p>
+      </div>
+
+      <!-- KPI 4：主力貢獻來源 -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold text-slate-500">主力營收貢獻</span>
+          <span class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+            </svg>
+          </span>
+        </div>
+        <div class="mt-2.5 space-y-1.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-500 shrink-0">冠軍品項：</span>
+            <span id="kpiTopProduct" class="font-bold text-slate-900 truncate ml-2">-</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-500 shrink-0">冠軍通路：</span>
+            <span id="kpiTopChannel" class="font-bold text-[#1E40AF] truncate ml-2">-</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第二層：時間銷售趨勢分析（折線圖） -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">銷售營收與數量趨勢</h2>
+          <p class="text-xs text-slate-500 mt-0.5">觀察不同時間區間的業績走勢波動，滑鼠懸停可查看精確數值</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- 指標切換：營收 vs 數量 -->
+          <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+            <button type="button" data-metric="revenue" class="metric-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#1E40AF] shadow-sm transition cursor-pointer">
+              營收金額 (NT$)
+            </button>
+            <button type="button" data-metric="qty" class="metric-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer">
+              銷售數量 (件)
+            </button>
+          </div>
+
+          <!-- 時間粒度切換：日 / 週 / 月 -->
+          <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+            <button type="button" data-granularity="day" class="granularity-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#1E40AF] shadow-sm transition cursor-pointer">
+              依日檢視
+            </button>
+            <button type="button" data-granularity="week" class="granularity-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer">
+              依週檢視
+            </button>
+            <button type="button" data-granularity="month" class="granularity-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer">
+              依月檢視
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="relative w-full h-72 sm:h-80">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </section>
+
+    <!-- 第三層：雙欄排行榜（品項排行 + 通路/業務排行） -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <!-- 左側卡片：品項銷售排行 -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">品項銷售排行（Top 10）</h2>
+            <p class="text-xs text-slate-500 mt-0.5">依總營收金額排序｜點擊長條圖可快速篩選該品項</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-lg bg-blue-50 text-[#1E40AF] text-xs font-semibold">營收佔比</span>
+        </div>
+        <div class="relative w-full h-72 flex-1">
+          <canvas id="productRankChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 右側卡片：通路 / 業務績效排行 -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">通路／業務績效排行（Top 10）</h2>
+            <p class="text-xs text-slate-500 mt-0.5">依總營收金額排序｜點擊長條圖可快速篩選該通路</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 text-xs font-semibold">績效佔比</span>
+        </div>
+        <div class="relative w-full h-72 flex-1">
+          <canvas id="channelRankChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 頁尾說明 -->
+  <footer class="bg-white border-t border-slate-200 mt-10 py-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <span>個人業務銷售數據分析儀表板｜Vibe Coding 第一版</span>
+      <span>支援本機 Excel (.xlsx / .xls) 與 CSV 檔案即時解析</span>
+    </div>
+  </footer>
+
+  <script>
+    /**
+     * ============================================================================
+     * 全域狀態與資料結構管理
+     * ============================================================================
+     */
+    const state = {
+      isMock: true,
+      fileName: '',
+      // 標準化後的資料陣列：每筆包含 { date: 'YYYY-MM-DD', channel: string, product: string, qty: number, amount: number }
+      rawRecords: [],
+      filteredRecords: [],
+      // 暫存上傳的 Excel/CSV 原始資料（供欄位對應面板使用）
+      pendingWorkbook: null,
+      pendingRawRows: [],
+      pendingHeaders: [],
+      // 圖表檢視狀態
+      trendMetric: 'revenue',     // 'revenue' | 'qty'
+      trendGranularity: 'day',    // 'day' | 'week' | 'month'
+      // Chart.js 實例
+      charts: {
+        trend: null,
+        product: null,
+        channel: null
+      }
+    };
+
+    /**
+     * ============================================================================
+     * 工具函式：通知提示、金額格式化、日期解析
+     * ============================================================================
+     */
+    let toastTimer = null;
+    function showToast(message, type = 'info') {
+      const banner = document.getElementById('toastBanner');
+      const content = document.getElementById('toastContent');
+      const icon = document.getElementById('toastIcon');
+      const msg = document.getElementById('toastMessage');
+
+      msg.textContent = message;
+      content.className = 'flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium bg-white ';
+
+      if (type === 'success') {
+        content.className += 'border-emerald-300 text-emerald-900';
+        icon.textContent = '✅';
+      } else if (type === 'error') {
+        content.className += 'border-red-300 text-red-900';
+        icon.textContent = '⚠️';
+      } else {
+        content.className += 'border-blue-300 text-slate-800';
+        icon.textContent = 'ℹ️';
+      }
+
+      banner.classList.remove('hidden');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 4200);
+    }
+
+    function formatCurrency(num) {
+      const val = Math.round(Number(num) || 0);
+      return 'NT$ ' + val.toLocaleString('zh-TW');
+    }
+
+    function formatNumber(num) {
+      const val = Math.round(Number(num) || 0);
+      return val.toLocaleString('zh-TW');
+    }
+
+    /**
+     * 彈性日期轉換：支援 Excel 序列號、YYYY/MM/DD、YYYY-MM-DD、MM/DD/YYYY 等格式
+     */
+    function normalizeDate(rawVal) {
+      if (rawVal === null || rawVal === undefined || rawVal === '') return null;
+
+      // 若為 Excel 數字序號 (例如 45678)
+      if (typeof rawVal === 'number' && rawVal > 20000 && rawVal < 80000) {
+        const utcDays = Math.floor(rawVal - 25569);
+        const dateObj = new Date(utcDays * 86400 * 1000);
+        if (!isNaN(dateObj.getTime())) {
+          return dateObj.toISOString().split('T')[0];
+        }
+      }
+
+      // 若為 JS Date 物件
+      if (rawVal instanceof Date && !isNaN(rawVal.getTime())) {
+        const y = rawVal.getFullYear();
+        const m = String(rawVal.getMonth() + 1).padStart(2, '0');
+        const d = String(rawVal.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      const str = String(rawVal).trim().replace(/\//g, '-');
+      // 匹配 YYYY-M-D 或 YYYY-MM-DD（可含時間部分）
+      const matchYMD = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (matchYMD) {
+        const y = matchYMD[1];
+        const m = matchYMD[2].padStart(2, '0');
+        const d = matchYMD[3].padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      // 嘗試原生解析
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const d = String(parsed.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      return null;
+    }
+
+    /**
+     * 彈性數值解析：移除 NT$、$、逗號與空白
+     */
+    function parseNumeric(rawVal, fallback = 0) {
+      if (typeof rawVal === 'number' && !isNaN(rawVal)) return rawVal;
+      if (rawVal === null || rawVal === undefined) return fallback;
+      const cleaned = String(rawVal).replace(/[^0-9.-]/g, '');
+      const num = parseFloat(cleaned);
+      return isNaN(num) ? fallback : num;
+    }
+
+    /**
+     * ============================================================================
+     * 內建 60 筆橫跨近 3 個月的臺灣業務/電商銷售模擬資料
+     * ============================================================================
+     */
+    function generateMockData() {
+      const channels = ['官網直購', '蝦皮商城', 'Momo購物', '企業客戶B2B', '業務團隊A'];
+      const products = [
+        { name: '智慧溫控手沖壺', unitPrice: 2680 },
+        { name: '隨行研磨咖啡杯', unitPrice: 1480 },
+        { name: '精品濾掛禮盒', unitPrice: 890 },
+        { name: '商用義式配件組', unitPrice: 4200 },
+        { name: '不鏽鋼保溫隨行瓶', unitPrice: 750 }
+      ];
+
+      // 產生固定可重現的擬隨機數，確保每次重設結果一致且合理
+      let seed = 20261127;
+      function seededRandom() {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+      }
+
+      const records = [];
+      const baseDate = new Date(); // 以使用者開啟當日往回推 85 天
+      for (let i = 0; i < 60; i++) {
+        const daysAgo = Math.floor(seededRandom() * 85);
+        const d = new Date(baseDate);
+        d.setDate(baseDate.getDate() - daysAgo);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+        const channel = channels[Math.floor(seededRandom() * channels.length)];
+        const prod = products[Math.floor(seededRandom() * products.length)];
+        // B2B 與業務團隊單筆數量較多
+        const isBulk = channel === '企業客戶B2B' || channel === '業務團隊A';
+        const qty = isBulk
+          ? Math.floor(seededRandom() * 12) + 3
+          : Math.floor(seededRandom() * 4) + 1;
+
+        const amount = qty * prod.unitPrice;
+        records.push({
+          date: dateStr,
+          channel,
+          product: prod.name,
+          qty,
+          amount
+        });
+      }
+
+      // 依日期由舊到新排序
+      records.sort((a, b) => a.date.localeCompare(b.date));
+      return records;
+    }
+
+    /**
+     * ============================================================================
+     * Excel / CSV 匯入與智慧欄位對應邏輯
+     * ============================================================================
+     */
+    function handleFileUpload(file) {
+      if (!file) return;
+      const reader = new FileReader();
+
+      reader.onload = function (e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          state.pendingWorkbook = workbook;
+          state.fileName = file.name;
+
+          // 處理工作表選單
+          const sheetSelect = document.getElementById('sheetSelector');
+          const sheetWrapper = document.getElementById('sheetSelectorWrapper');
+          sheetSelect.innerHTML = '';
+
+          workbook.SheetNames.forEach((name) => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            sheetSelect.appendChild(opt);
+          });
+
+          if (workbook.SheetNames.length > 1) {
+            sheetWrapper.classList.remove('hidden');
+            sheetWrapper.classList.add('flex');
+          } else {
+            sheetWrapper.classList.add('hidden');
+            sheetWrapper.classList.remove('flex');
+          }
+
+          loadSheetForMapping(workbook.SheetNames[0]);
+        } catch (err) {
+          console.error(err);
+          showToast('檔案讀取失敗，請確認檔案未損毀且為有效的 .xlsx 或 .csv 格式。', 'error');
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function loadSheetForMapping(sheetName) {
+      const sheet = state.pendingWorkbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if (!rows || rows.length === 0) {
+        showToast('此工作表沒有讀取到任何資料列，請確認內容或切換其他工作表。', 'error');
+        return;
+      }
+
+      const headers = Object.keys(rows[0]).filter((h) => h && !h.startsWith('__EMPTY'));
+      if (headers.length === 0) {
+        showToast('找不到有效的欄位標題，請確認檔案第一列為欄位名稱。', 'error');
+        return;
+      }
+
+      state.pendingRawRows = rows;
+      state.pendingHeaders = headers;
+
+      document.getElementById('uploadedFileName').textContent = state.fileName;
+      document.getElementById('uploadedRowCount').textContent = rows.length.toLocaleString('zh-TW');
+
+      populateMappingSelects(headers);
+
+      const panel = document.getElementById('mappingPanel');
+      panel.classList.remove('hidden');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function populateMappingSelects(headers) {
+      const configs = [
+        { id: 'mapDate', required: true, keywords: ['日期', '時間', 'date', 'time', '訂單日', '交易日'] },
+        { id: 'mapAmount', required: true, keywords: ['金額', '營收', '小計', '總額', '實收', '銷售額', 'amount', 'sales', 'revenue', 'total', 'price'] },
+        { id: 'mapQty', required: false, keywords: ['數量', '件數', '銷量', 'qty', 'quantity', 'count', 'units'] },
+        { id: 'mapProduct', required: false, keywords: ['品項', '產品', '商品', '名稱', '品名', 'product', 'item', 'sku'] },
+        { id: 'mapChannel', required: false, keywords: ['通路', '業務', '平台', '部門', '來源', '客戶', 'channel', 'salesperson', 'source'] }
+      ];
+
+      configs.forEach((cfg) => {
+        const select = document.getElementById(cfg.id);
+        select.innerHTML = '';
+
+        if (!cfg.required) {
+          const emptyOpt = document.createElement('option');
+          emptyOpt.value = '';
+          emptyOpt.textContent = '（無此欄位 / 使用預設值）';
+          select.appendChild(emptyOpt);
+        }
+
+        let matchedHeader = '';
+        headers.forEach((h) => {
+          const opt = document.createElement('option');
+          opt.value = h;
+          opt.textContent = h;
+          select.appendChild(opt);
+
+          if (!matchedHeader) {
+            const lower = h.toLowerCase();
+            if (cfg.keywords.some((kw) => lower.includes(kw))) {
+              matchedHeader = h;
+            }
+          }
+        });
+
+        if (matchedHeader) {
+          select.value = matchedHeader;
+        }
+      });
+    }
+
+    function applyColumnMapping() {
+      const colDate = document.getElementById('mapDate').value;
+      const colAmount = document.getElementById('mapAmount').value;
+      const colQty = document.getElementById('mapQty').value;
+      const colProduct = document.getElementById('mapProduct').value;
+      const colChannel = document.getElementById('mapChannel').value;
+
+      if (!colDate || !colAmount) {
+        showToast('請務必選擇「日期」與「金額 / 營收」對應欄位！', 'error');
+        return;
+      }
+
+      const parsedRecords = [];
+      let skippedCount = 0;
+
+      state.pendingRawRows.forEach((row) => {
+        const dateStr = normalizeDate(row[colDate]);
+        if (!dateStr) {
+          skippedCount++;
+          return;
+        }
+
+        const amount = parseNumeric(row[colAmount], NaN);
+        if (isNaN(amount)) {
+          skippedCount++;
+          return;
+        }
+
+        const qty = colQty ? Math.max(0, parseNumeric(row[colQty], 1)) : 1;
+        const product = colProduct && String(row[colProduct]).trim() !== ''
+          ? String(row[colProduct]).trim()
+          : '未分類品項';
+        const channel = colChannel && String(row[colChannel]).trim() !== ''
+          ? String(row[colChannel]).trim()
+          : '未分類通路';
+
+        parsedRecords.push({
+          date: dateStr,
+          channel,
+          product,
+          qty,
+          amount
+        });
+      });
+
+      if (parsedRecords.length === 0) {
+        showToast('無法解析出有效的銷售紀錄，請檢查「日期」與「金額」欄位是否選對。', 'error');
+        return;
+      }
+
+      parsedRecords.sort((a, b) => a.date.localeCompare(b.date));
+
+      state.isMock = false;
+      state.rawRecords = parsedRecords;
+      document.getElementById('mappingPanel').classList.add('hidden');
+
+      updateStatusBadge();
+      initFilterControls();
+      applyFiltersAndRender();
+
+      const extraMsg = skippedCount > 0 ? `（略過 ${skippedCount} 筆空白或格式異常列）` : '';
+      showToast(`成功匯入 ${parsedRecords.length.toLocaleString('zh-TW')} 筆真實資料！${extraMsg}`, 'success');
+    }
+
+    /**
+     * ============================================================================
+     * 狀態標籤與篩選器初始化
+     * ============================================================================
+     */
+    function updateStatusBadge() {
+      const badge = document.getElementById('dataStatusBadge');
+      const text = document.getElementById('dataStatusText');
+
+      if (state.isMock) {
+        badge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200';
+        badge.querySelector('span').className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
+        text.textContent = `目前顯示：內建模擬資料（共 ${state.rawRecords.length} 筆）`;
+      } else {
+        badge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-[#1E40AF] border border-blue-200';
+        badge.querySelector('span').className = 'w-2 h-2 rounded-full bg-[#2563EB]';
+        text.textContent = `目前顯示：已匯入真實檔案（${state.fileName}，共 ${state.rawRecords.length.toLocaleString('zh-TW')} 筆）`;
+      }
+    }
+
+    function initFilterControls() {
+      if (state.rawRecords.length === 0) return;
+
+      const dates = state.rawRecords.map((r) => r.date).sort();
+      const minDate = dates[0];
+      const maxDate = dates[dates.length - 1];
+
+      const startInput = document.getElementById('filterStartDate');
+      const endInput = document.getElementById('filterEndDate');
+      startInput.value = minDate;
+      endInput.value = maxDate;
+
+      // 填充通路下拉選單
+      const channels = Array.from(new Set(state.rawRecords.map((r) => r.channel))).sort();
+      const channelSelect = document.getElementById('filterChannel');
+      channelSelect.innerHTML = '<option value="ALL">全部通路 / 業務</option>';
+      channels.forEach((ch) => {
+        const opt = document.createElement('option');
+        opt.value = ch;
+        opt.textContent = ch;
+        channelSelect.appendChild(opt);
+      });
+
+      // 填充品項下拉選單
+      const products = Array.from(new Set(state.rawRecords.map((r) => r.product))).sort();
+      const productSelect = document.getElementById('filterProduct');
+      productSelect.innerHTML = '<option value="ALL">全部商品品項</option>';
+      products.forEach((pr) => {
+        const opt = document.createElement('option');
+        opt.value = pr;
+        opt.textContent = pr;
+        productSelect.appendChild(opt);
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 核心篩選與統計指標計算
+     * ============================================================================
+     */
+    function applyFiltersAndRender() {
+      const startDate = document.getElementById('filterStartDate').value;
+      const endDate = document.getElementById('filterEndDate').value;
+      const selectedChannel = document.getElementById('filterChannel').value;
+      const selectedProduct = document.getElementById('filterProduct').value;
+
+      state.filteredRecords = state.rawRecords.filter((rec) => {
+        if (startDate && rec.date < startDate) return false;
+        if (endDate && rec.date > endDate) return false;
+        if (selectedChannel !== 'ALL' && rec.channel !== selectedChannel) return false;
+        if (selectedProduct !== 'ALL' && rec.product !== selectedProduct) return false;
+        return true;
+      });
+
+      document.getElementById('filteredCountText').textContent = state.filteredRecords.length.toLocaleString('zh-TW');
+
+      updateKPICards();
+      renderTrendChart();
+      renderRankingCharts();
+    }
+
+    function updateKPICards() {
+      const recs = state.filteredRecords;
+      const count = recs.length;
+
+      let totalRevenue = 0;
+      let totalQty = 0;
+      const productMap = new Map();
+      const channelMap = new Map();
+
+      recs.forEach((r) => {
+        totalRevenue += r.amount;
+        totalQty += r.qty;
+        productMap.set(r.product, (productMap.get(r.product) || 0) + r.amount);
+        channelMap.set(r.channel, (channelMap.get(r.channel) || 0) + r.amount);
+      });
+
+      const avgOrder = count > 0 ? totalRevenue / count : 0;
+      const avgQty = count > 0 ? (totalQty / count).toFixed(1) : '0';
+
+      document.getElementById('kpiTotalRevenue').textContent = formatCurrency(totalRevenue);
+      document.getElementById('kpiTotalQty').textContent = `${formatNumber(totalQty)} 件`;
+      document.getElementById('kpiAvgQtySub').textContent = `平均每筆銷售：${avgQty} 件`;
+      document.getElementById('kpiAvgOrder').textContent = formatCurrency(avgOrder);
+      document.getElementById('kpiOrderCountSub').textContent = `依據 ${formatNumber(count)} 筆有效紀錄計算`;
+
+      const startVal = document.getElementById('filterStartDate').value || '不限';
+      const endVal = document.getElementById('filterEndDate').value || '不限';
+      document.getElementById('kpiDateRangeSub').textContent = `統計區間：${startVal} ～ ${endVal}`;
+
+      // 計算冠軍品項與佔比
+      if (productMap.size > 0 && totalRevenue > 0) {
+        const topProd = Array.from(productMap.entries()).sort((a, b) => b[1] - a[1])[0];
+        const share = ((topProd[1] / totalRevenue) * 100).toFixed(1);
+        document.getElementById('kpiTopProduct').textContent = `${topProd[0]} (${share}%)`;
+      } else {
+        document.getElementById('kpiTopProduct').textContent = '無符合資料';
+      }
+
+      // 計算冠軍通路與佔比
+      if (channelMap.size > 0 && totalRevenue > 0) {
+        const topChan = Array.from(channelMap.entries()).sort((a, b) => b[1] - a[1])[0];
+        const share = ((topChan[1] / totalRevenue) * 100).toFixed(1);
+        document.getElementById('kpiTopChannel').textContent = `${topChan[0]} (${share}%)`;
+      } else {
+        document.getElementById('kpiTopChannel').textContent = '無符合資料';
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 圖表繪製：時間銷售趨勢折線圖
+     * ============================================================================
+     */
+    function getWeekStart(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const dayOfWeek = dt.getDay(); // 0(日) ~ 6(六)
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      dt.setDate(dt.getDate() + diffToMonday);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+
+    function renderTrendChart() {
+      const ctx = document.getElementById('trendChart').getContext('2d');
+      const grouped = new Map();
+
+      state.filteredRecords.forEach((r) => {
+        let key = r.date;
+        if (state.trendGranularity === 'week') {
+          key = getWeekStart(r.date) + ' 週';
+        } else if (state.trendGranularity === 'month') {
+          key = r.date.slice(0, 7);
+        }
+
+        const val = state.trendMetric === 'revenue' ? r.amount : r.qty;
+        grouped.set(key, (grouped.get(key) || 0) + val);
+      });
+
+      const sortedKeys = Array.from(grouped.keys()).sort();
+      const dataValues = sortedKeys.map((k) => grouped.get(k));
+
+      const isRevenue = state.trendMetric === 'revenue';
+      const labelName = isRevenue ? '營收金額 (NT$)' : '銷售數量 (件)';
+      const lineColor = isRevenue ? '#1E40AF' : '#0284C7';
+      const fillColor = isRevenue ? 'rgba(37, 99, 235, 0.12)' : 'rgba(2, 132, 199, 0.12)';
+
+      if (state.charts.trend) {
+        state.charts.trend.destroy();
+      }
+
+      state.charts.trend = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: sortedKeys,
+          datasets: [{
+            label: labelName,
+            data: dataValues,
+            borderColor: lineColor,
+            backgroundColor: fillColor,
+            borderWidth: 2.5,
+            pointBackgroundColor: '#FFFFFF',
+            pointBorderColor: lineColor,
+            pointBorderWidth: 2,
+            pointRadius: sortedKeys.length > 45 ? 2 : 4,
+            pointHoverRadius: 6,
+            fill: true,
+            tension: 0.25
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              titleFont: { family: 'Noto Sans TC, Inter, sans-serif', size: 13 },
+              bodyFont: { family: 'Noto Sans TC, Inter, sans-serif', size: 13 },
+              padding: 12,
+              cornerRadius: 10,
+              callbacks: {
+                label: function (context) {
+                  const val = context.parsed.y;
+                  return isRevenue
+                    ? ` 營收金額：${formatCurrency(val)}`
+                    : ` 銷售數量：${formatNumber(val)} 件`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: '#64748B',
+                maxRotation: 35,
+                autoSkip: true,
+                maxTicksLimit: 12,
+                font: { size: 11 }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              border: { display: false },
+              grid: { color: '#E2E8F0' },
+              ticks: {
+                color: '#64748B',
+                font: { size: 11 },
+                callback: function (value) {
+                  if (isRevenue) {
+                    return value >= 10000 ? `${(value / 10000).toFixed(1)}萬` : value.toLocaleString();
+                  }
+                  return value.toLocaleString();
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 圖表繪製：品項與通路雙欄排行榜（水平長條圖，支援點擊連動篩選）
+     * ============================================================================
+     */
+    function renderRankingCharts() {
+      const totalRevenue = state.filteredRecords.reduce((sum, r) => sum + r.amount, 0);
+
+      // 彙整品項營收
+      const prodMap = new Map();
+      const chanMap = new Map();
+
+      state.filteredRecords.forEach((r) => {
+        prodMap.set(r.product, (prodMap.get(r.product) || 0) + r.amount);
+        chanMap.set(r.channel, (chanMap.get(r.channel) || 0) + r.amount);
+      });
+
+      const topProducts = Array.from(prodMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      const topChannels = Array.from(chanMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+      // 繪製品項排行
+      state.charts.product = buildHorizontalBarChart(
+        'productRankChart',
+        state.charts.product,
+        topProducts,
+        totalRevenue,
+        '#2563EB',
+        (selectedName) => {
+          const select = document.getElementById('filterProduct');
+          if (select.value === selectedName) {
+            select.value = 'ALL';
+            showToast(`已取消篩選品項「${selectedName}」`, 'info');
+          } else {
+            select.value = selectedName;
+            showToast(`已快速篩選品項：「${selectedName}」`, 'info');
+          }
+          applyFiltersAndRender();
+        }
+      );
+
+      // 繪製通路/業務排行
+      state.charts.channel = buildHorizontalBarChart(
+        'channelRankChart',
+        state.charts.channel,
+        topChannels,
+        totalRevenue,
+        '#0284C7',
+        (selectedName) => {
+          const select = document.getElementById('filterChannel');
+          if (select.value === selectedName) {
+            select.value = 'ALL';
+            showToast(`已取消篩選通路「${selectedName}」`, 'info');
+          } else {
+            select.value = selectedName;
+            showToast(`已快速篩選通路／業務：「${selectedName}」`, 'info');
+          }
+          applyFiltersAndRender();
+        }
+      );
+    }
+
+    function buildHorizontalBarChart(canvasId, existingChart, entries, totalRevenue, barColor, onBarClick) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      if (existingChart) {
+        existingChart.destroy();
+      }
+
+      const labels = entries.map((e) => e[0]);
+      const values = entries.map((e) => e[1]);
+
+      return new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: '營收金額',
+            data: values,
+            backgroundColor: barColor,
+            hoverBackgroundColor: '#1E3A8A',
+            borderRadius: 6,
+            barPercentage: 0.65
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: (event, elements) => {
+            if (elements && elements.length > 0) {
+              const idx = elements[0].index;
+              const clickedLabel = labels[idx];
+              if (clickedLabel && onBarClick) {
+                onBarClick(clickedLabel);
+              }
+            }
+          },
+          onHover: (event, chartElement) => {
+            event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              padding: 12,
+              cornerRadius: 10,
+              callbacks: {
+                label: function (context) {
+                  const val = context.parsed.x;
+                  const pct = totalRevenue > 0 ? ((val / totalRevenue) * 100).toFixed(1) : '0.0';
+                  return ` 營收：${formatCurrency(val)}（佔比 ${pct}%）`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              border: { display: false },
+              grid: { color: '#F1F5F9' },
+              ticks: {
+                color: '#64748B',
+                font: { size: 11 },
+                callback: (val) => val >= 10000 ? `${(val / 10000).toFixed(1)}萬` : val.toLocaleString()
+              }
+            },
+            y: {
+              grid: { display: false },
+              ticks: {
+                color: '#1E293B',
+                font: { family: 'Noto Sans TC, Inter, sans-serif', size: 12, weight: '500' }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 下載標準範例 CSV（含 UTF-8 BOM 確保 Excel 開啟不亂碼）
+     * ============================================================================
+     */
+    function downloadSampleCSV() {
+      const sampleRows = [
+        ['日期', '通路/業務', '品項', '數量', '金額'],
+        ['2026-11-01', '官網直購', '智慧溫控手沖壺', 2, 5360],
+        ['2026-11-03', '蝦皮商城', '精品濾掛禮盒', 5, 4450],
+        ['2026-11-05', '企業客戶B2B', '商用義式配件組', 4, 16800],
+        ['2026-11-08', 'Momo購物', '隨行研磨咖啡杯', 3, 4440],
+        ['2026-11-12', '業務團隊A', '不鏽鋼保溫隨行瓶', 10, 7500]
+      ];
+
+      const csvContent = '\uFEFF' + sampleRows.map((row) => row.join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '銷售報表標準範例.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast('已下載「銷售報表標準範例.csv」，可直接用 Excel 開啟參考欄位格式。', 'success');
+    }
+
+    /**
+     * ============================================================================
+     * 事件綁定與初始化啟動
+     * ============================================================================
+     */
+    window.addEventListener('DOMContentLoaded', () => {
+      // 1. 載入預設模擬資料
+      state.rawRecords = generateMockData();
+      updateStatusBadge();
+      initFilterControls();
+      applyFiltersAndRender();
+
+      // 2. 匯入檔案按鈕與 input 監聽
+      const fileInput = document.getElementById('fileInput');
+      document.getElementById('btnImportFile').addEventListener('click', () => {
+        fileInput.value = '';
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleFileUpload(e.target.files[0]);
+        }
+      });
+
+      // 工作表切換監聽
+      document.getElementById('sheetSelector').addEventListener('change', (e) => {
+        loadSheetForMapping(e.target.value);
+      });
+
+      // 欄位對應面板按鈕
+      document.getElementById('btnApplyMapping').addEventListener('click', applyColumnMapping);
+      document.getElementById('btnCancelMapping').addEventListener('click', () => {
+        document.getElementById('mappingPanel').classList.add('hidden');
+      });
+
+      // 下載範例 CSV
+      document.getElementById('btnDownloadSample').addEventListener('click', downloadSampleCSV);
+
+      // 重設為模擬資料
+      document.getElementById('btnResetMock').addEventListener('click', () => {
+        state.isMock = true;
+        state.fileName = '';
+        state.rawRecords = generateMockData();
+        document.getElementById('mappingPanel').classList.add('hidden');
+        updateStatusBadge();
+        initFilterControls();
+        applyFiltersAndRender();
+        showToast('已恢復為系統內建的 60 筆模擬銷售資料。', 'info');
+      });
+
+      // 篩選條件變更監聽
+      ['filterStartDate', 'filterEndDate', 'filterChannel', 'filterProduct'].forEach((id) => {
+        document.getElementById(id).addEventListener('change', applyFiltersAndRender);
+      });
+
+      // 清除篩選
+      document.getElementById('btnClearFilters').addEventListener('click', () => {
+        initFilterControls();
+        applyFiltersAndRender();
+        showToast('已清除所有篩選條件，顯示完整資料範圍。', 'info');
+      });
+
+      // 趨勢圖指標切換（營收 / 數量）
+      document.querySelectorAll('.metric-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.trendMetric = btn.dataset.metric;
+          document.querySelectorAll('.metric-btn').forEach((b) => {
+            b.className = 'metric-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer';
+          });
+          btn.className = 'metric-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#1E40AF] shadow-sm transition cursor-pointer';
+          renderTrendChart();
+        });
+      });
+
+      // 趨勢圖時間粒度切換（日 / 週 / 月）
+      document.querySelectorAll('.granularity-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.trendGranularity = btn.dataset.granularity;
+          document.querySelectorAll('.granularity-btn').forEach((b) => {
+            b.className = 'granularity-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer';
+          });
+          btn.className = 'granularity-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#1E40AF] shadow-sm transition cursor-pointer';
+          renderTrendChart();
+        });
+      });
+    });
+  </script>
+</body>
+</html>
